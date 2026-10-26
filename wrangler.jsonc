@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "personal-jarvis",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  // The chat UI in public/ is served as static assets; /api/* hits the Worker.
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  // Workers AI: Whisper for speech-to-text, Deepgram Aura for cloud text-to-speech.
+  "ai": { "binding": "AI" },
+  "observability": { "enabled": true }
+  // Secrets (set with `npx wrangler secret put <NAME>`):
+  //   ANTHROPIC_API_KEY  - your Claude API key
+  //   APP_PASSWORD       - the password the web UI asks for
+}

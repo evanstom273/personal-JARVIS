@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+  <meta name="theme-color" content="#0d1117" />
+  <title>JARVIS</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='none' stroke='%2358c4dc' stroke-width='10'/><circle cx='50' cy='50' r='14' fill='%2358c4dc'/></svg>" />
+  <link rel="stylesheet" href="style.css" />
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <div id="app">
+    <aside id="sidebar">
+      <div class="sidebar-head">
+        <button id="new-chat" class="btn wide">+ New chat</button>
+      </div>
+      <nav id="conversation-list"></nav>
+      <div class="sidebar-foot">
+        <button id="open-settings" class="btn ghost wide">Settings</button>
+      </div>
+    </aside>
+    <div id="scrim"></div>
+
+    <main>
+      <header id="topbar">
+        <button id="toggle-sidebar" class="icon-btn" aria-label="Conversations">
+          <svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+        </button>
+        <h1 id="chat-title">JARVIS</h1>
+        <button id="stop-speaking" class="icon-btn hidden" aria-label="Stop speaking" title="Stop speaking">
+          <svg viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="m16 9 5 6m0-6-5 6"/></svg>
+        </button>
+      </header>
+
+      <section id="messages" aria-live="polite">
+        <div id="empty-state">
+          <div class="orb"></div>
+          <p>What can I do for you?</p>
+        </div>
+      </section>
+
+      <form id="composer">
+        <div id="attachment-tray"></div>
+        <div class="composer-row">
+          <button type="button" id="attach" class="icon-btn" aria-label="Attach files" title="Attach images, PDFs or text files">
+            <svg viewBox="0 0 24 24"><path d="m21 11-8.5 8.5a5.5 5.5 0 0 1-7.8-7.8l9-9a3.7 3.7 0 0 1 5.2 5.2l-9 9a1.8 1.8 0 0 1-2.6-2.6L15.5 6"/></svg>
+          </button>
+          <input type="file" id="file-input" multiple hidden />
+          <textarea id="input" rows="1" placeholder="Message JARVIS…" autocomplete="off"></textarea>
+          <button type="button" id="mic" class="icon-btn" aria-label="Dictate" title="Dictate">
+            <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+          </button>
+          <button type="submit" id="send" class="icon-btn primary" aria-label="Send">
+            <svg class="send-icon" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+            <svg class="stop-icon" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>
+          </button>
+        </div>
+      </form>
+    </main>
+  </div>
+
+  <div id="drop-overlay">Drop files to attach</div>
+
+  <dialog id="login">
+    <form method="dialog" id="login-form">
+      <h2>JARVIS</h2>
+      <p>Enter the app password (the <code>APP_PASSWORD</code> secret on your Worker).</p>
+      <input type="password" id="login-password" autocomplete="current-password" required />
+      <p id="login-error" class="error"></p>
+      <button class="btn wide" type="submit">Unlock</button>
+    </form>
+  </dialog>
+
+  <dialog id="settings">
+    <form method="dialog" id="settings-form">
+      <h2>Settings</h2>
+
+      <fieldset>
+        <legend>Voice input</legend>
+        <label>Speech-to-text
+          <select name="sttEngine">
+            <option value="cloud">Whisper (Workers AI)</option>
+            <option value="browser">Browser built-in</option>
+          </select>
+        </label>
+        <label class="check"><input type="checkbox" name="autoSendVoice" /> Send straight after dictating</label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Voice output</legend>
+        <label>Read replies aloud
+          <select name="autoSpeak">
+            <option value="voice">When I used the mic</option>
+            <option value="always">Always</option>
+            <option value="never">Never</option>
+          </select>
+        </label>
+        <label>Text-to-speech
+          <select name="ttsEngine">
+            <option value="browser">Browser built-in</option>
+            <option value="cloud">Deepgram Aura (Workers AI)</option>
+          </select>
+        </label>
+        <label data-engine="browser">Browser voice <select name="browserVoice"></select></label>
+        <label data-engine="cloud">Aura voice <select name="cloudVoice"></select></label>
+        <button type="button" id="test-voice" class="btn ghost">Test voice</button>
+      </fieldset>
+
+      <fieldset>
+        <legend>Access</legend>
+        <button type="button" id="logout" class="btn ghost">Forget password on this device</button>
+      </fieldset>
+
+      <div class="dialog-actions">
+        <button class="btn" value="save">Done</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>

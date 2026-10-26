@@ -1,0 +1,29 @@
+{
+  "name": "personal-jarvis",
+  "version": "1.0.0",
+  "description": "Personal AI assistant on Claude Haiku 5.5, hosted on Cloudflare Workers",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc",
+    "check": "tsc && node --check public/app.js && node --check public/db.js && node --check public/voice.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/evanstom273/personal-JARVIS.git"
+  },
+  "bugs": {
+    "url": "https://github.com/evanstom273/personal-JARVIS/issues"
+  },
+  "homepage": "https://github.com/evanstom273/personal-JARVIS#readme",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.3.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261026.1",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.152.0"
+  },
+  "private": true,
+  "type": "module"
+}
