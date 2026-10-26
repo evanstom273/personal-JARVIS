@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { MEMORY_TOOLS } from "./memory-tools";
 import { buildSystemPrompt, type Persona } from "./system-prompt";
 
 const MODEL = "claude-haiku-5-5";
@@ -134,6 +135,7 @@ function buildTools(request: Request): Anthropic.Beta.BetaToolUnion[] {
   return [
     { type: "web_search_20250305", name: "web_search", max_uses: 5, user_location: location },
     { type: "web_fetch_20250910", name: "web_fetch", max_uses: 5, citations: { enabled: true } },
+    ...MEMORY_TOOLS,
   ];
 }
 
@@ -150,7 +152,7 @@ async function forwardStream(
     switch (event.type) {
       case "content_block_start": {
         const block = event.content_block;
-        if (block.type === "server_tool_use") {
+        if (block.type === "server_tool_use" || block.type === "tool_use") {
           pendingTools.set(event.index, { name: block.name, json: "" });
         } else if (block.type === "web_search_tool_result") {
           if (Array.isArray(block.content)) {

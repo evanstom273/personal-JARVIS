@@ -12,10 +12,28 @@
 <body>
   <div id="app">
     <aside id="sidebar">
-      <div class="sidebar-head">
-        <button id="new-chat" class="btn wide">+ New chat</button>
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" data-tab="chats" class="active">Chats</button>
+        <button type="button" role="tab" data-tab="notes">Notes</button>
       </div>
-      <nav id="conversation-list"></nav>
+      <div id="chats-panel" class="panel">
+        <div class="sidebar-head">
+          <button id="new-chat" class="btn wide">+ New chat</button>
+        </div>
+        <nav id="conversation-list"></nav>
+      </div>
+      <div id="notes-panel" class="panel" hidden>
+        <div class="sidebar-head">
+          <div class="button-row">
+            <button id="new-note" class="btn">+ New note</button>
+            <button id="import-notes" class="btn ghost" title="Upload Markdown files as notes">Upload</button>
+            <button id="export-notes" class="btn ghost" title="Download every note as a .zip (opens as an Obsidian vault)">Export</button>
+          </div>
+          <input type="search" id="note-search" placeholder="Search notes…" autocomplete="off" />
+          <input type="file" id="note-file-input" multiple accept=".md,.markdown,.txt,text/markdown,text/plain" hidden />
+        </div>
+        <nav id="note-list"></nav>
+      </div>
       <div class="sidebar-foot">
         <button id="open-settings" class="btn ghost wide">Settings</button>
       </div>
@@ -57,6 +75,27 @@
           </button>
         </div>
       </form>
+
+      <section id="note-view" hidden>
+        <div id="note-read">
+          <div class="note-toolbar">
+            <span id="note-meta"></span>
+            <button type="button" id="note-edit" class="btn ghost">Edit</button>
+            <button type="button" id="note-delete" class="btn ghost danger">Delete</button>
+          </div>
+          <div id="note-body"></div>
+          <div id="note-backlinks"></div>
+        </div>
+        <form id="note-editor" hidden>
+          <input type="text" id="note-title-input" placeholder="Title" autocomplete="off" required />
+          <textarea id="note-content-input" placeholder="Write in Markdown. Link other notes with [[Note title]], tag with #tag."></textarea>
+          <p id="note-error" class="error"></p>
+          <div class="note-toolbar">
+            <button type="button" id="note-cancel" class="btn ghost">Cancel</button>
+            <button type="submit" class="btn">Save</button>
+          </div>
+        </form>
+      </section>
     </main>
   </div>
 
