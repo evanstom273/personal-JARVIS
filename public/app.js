@@ -33,6 +33,9 @@ const DEFAULT_SETTINGS = {
   ttsEngine: "browser",
   browserVoice: "",
   cloudVoice: "pandora",
+  assistantName: "",
+  userName: "",
+  customInstructions: "",
 };
 const AURA_VOICES = [
   "pandora", "draco", "amalthea", "andromeda", "apollo", "arcas", "aries", "asteria", "athena",
@@ -61,6 +64,20 @@ const store = {
 };
 
 let settings = { ...DEFAULT_SETTINGS, ...store.get("settings", {}) };
+
+const assistantName = () => settings.assistantName.trim() || "JARVIS";
+const persona = () => ({
+  assistantName: settings.assistantName,
+  userName: settings.userName,
+  instructions: settings.customInstructions,
+});
+
+function applyName() {
+  const name = assistantName();
+  document.title = name;
+  els.input.placeholder = `Message ${name}…`;
+  if (!current) els.title.textContent = name;
+}
 // Your Claude API key lives only in this browser (IndexedDB) and is sent with
 // each chat request; the Worker never stores it.
 let apiKey = "";
@@ -171,7 +188,7 @@ function groupMessages(messages) {
 }
 
 function renderMessages() {
-  els.title.textContent = current?.title ?? "JARVIS";
+  els.title.textContent = current?.title ?? assistantName();
   const nodes = [];
   for (const g of groupMessages(current?.messages ?? [])) {
     nodes.push(g.role === "user" ? userNode(g.items) : assistantNode(g.items.flatMap((m) => m.content)));
@@ -537,7 +554,7 @@ async function streamReply(conv, { speakAfter }) {
     const res = await apiFetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: apiMessages(conv) }),
+      body: JSON.stringify({ messages: apiMessages(conv), persona: persona() }),
       signal: streaming.signal,
     });
     if (!res.ok) {
@@ -762,10 +779,14 @@ function readSettingsForm() {
   }
   return next;
 }
-sform.addEventListener("change", () => {
-  settings = readSettingsForm();
-  store.set("settings", settings);
-});
+// "input" so typing in the instructions box is saved without needing to blur it.
+for (const type of ["input", "change"]) {
+  sform.addEventListener(type, () => {
+    settings = readSettingsForm();
+    store.set("settings", settings);
+    applyName();
+  });
+}
 $("#test-voice").onclick = () => speakText("Hello. This is how I'll sound when I read replies aloud.");
 $("#change-key").onclick = () => {
   els.settings.close();
@@ -782,6 +803,7 @@ $("#forget-key").onclick = async () => {
 // ---------- Boot ----------
 
 (async () => {
+  applyName();
   renderMessages();
   renderSidebar();
   updateSendState();
