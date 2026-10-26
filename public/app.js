@@ -1,6 +1,9 @@
 import { marked } from "./vendor/marked.esm.js";
 import DOMPurify from "./vendor/purify.es.mjs";
-import { listConversations, getConversation, saveConversation, deleteConversation } from "./db.js";
+import {
+  listConversations, getConversation, saveConversation, deleteConversation,
+  getSetting, setSetting, deleteSetting,
+} from "./db.js";
 import { Recorder, Speaker } from "./voice.js";
 
 const $ = (sel) => document.querySelector(sel);
@@ -17,11 +20,11 @@ const els = {
   fileInput: $("#file-input"),
   tray: $("#attachment-tray"),
   stopSpeaking: $("#stop-speaking"),
-  login: $("#login"),
+  keyDialog: $("#key-dialog"),
   settings: $("#settings"),
 };
 
-// ---------- Settings & auth ----------
+// ---------- Settings & API key ----------
 
 const DEFAULT_SETTINGS = {
   sttEngine: "cloud",
@@ -58,38 +61,38 @@ const store = {
 };
 
 let settings = { ...DEFAULT_SETTINGS, ...store.get("settings", {}) };
-let password = store.get("password", "");
+// Your Claude API key lives only in this browser (IndexedDB) and is sent with
+// each chat request; the Worker never stores it.
+let apiKey = "";
 
 async function apiFetch(path, opts = {}) {
   const res = await fetch(path, {
     ...opts,
-    headers: { ...opts.headers, Authorization: `Bearer ${password}` },
+    headers: { ...opts.headers, "X-Api-Key": apiKey },
   });
-  if (res.status === 401) {
-    showLogin("That password didn't work.");
-  }
+  if (res.status === 401) showKeyDialog("Add your Claude API key to start chatting.");
   return res;
 }
 
-function showLogin(message = "") {
-  $("#login-error").textContent = message;
-  if (!els.login.open) els.login.showModal();
-  $("#login-password").focus();
+function showKeyDialog(message = "") {
+  $("#key-error").textContent = message;
+  $("#key-input").value = apiKey;
+  if (!els.keyDialog.open) els.keyDialog.showModal();
+  $("#key-input").focus();
 }
 
-$("#login-form").addEventListener("submit", async (e) => {
+$("#key-form").addEventListener("submit", async (e) => {
   e.preventDefault();
-  password = $("#login-password").value;
-  const res = await fetch("/api/ping", { headers: { Authorization: `Bearer ${password}` } }).catch(() => null);
-  if (res?.ok) {
-    store.set("password", password);
-    els.login.close();
-  } else {
-    const data = await res?.json().catch(() => ({}));
-    $("#login-error").textContent = data?.error || "Couldn't reach the server.";
+  const key = $("#key-input").value.trim();
+  if (!key.startsWith("sk-ant-")) {
+    $("#key-error").textContent = "That doesn't look like a Claude API key (they start with sk-ant-).";
+    return;
   }
+  apiKey = key;
+  await setSetting("apiKey", key);
+  els.keyDialog.close();
 });
-els.login.addEventListener("cancel", (e) => e.preventDefault());
+$("#key-cancel").onclick = () => els.keyDialog.close();
 
 // ---------- Conversations ----------
 
@@ -480,6 +483,7 @@ const apiMessages = (conv) => conv.messages.map(({ role, content }) => ({ role, 
 async function send({ viaVoice = false } = {}) {
   const text = els.input.value.trim();
   if (streaming || (!text && !pending.length)) return;
+  if (!apiKey) return showKeyDialog("Add your Claude API key to start chatting.");
 
   // The timestamp is stored as part of the message (not injected server-side)
   // so the history we send back is always byte-identical to what Claude saw.
@@ -763,11 +767,16 @@ sform.addEventListener("change", () => {
   store.set("settings", settings);
 });
 $("#test-voice").onclick = () => speakText("Hello. This is how I'll sound when I read replies aloud.");
-$("#logout").onclick = () => {
-  store.set("password", "");
-  password = "";
+$("#change-key").onclick = () => {
   els.settings.close();
-  showLogin();
+  showKeyDialog();
+};
+$("#forget-key").onclick = async () => {
+  if (!confirm("Remove the API key from this browser?")) return;
+  apiKey = "";
+  await deleteSetting("apiKey");
+  els.settings.close();
+  showKeyDialog();
 };
 
 // ---------- Boot ----------
@@ -776,8 +785,6 @@ $("#logout").onclick = () => {
   renderMessages();
   renderSidebar();
   updateSendState();
-  if (!password) return showLogin();
-  const res = await fetch("/api/ping", { headers: { Authorization: `Bearer ${password}` } }).catch(() => null);
-  if (res?.status === 401) showLogin("Saved password no longer works.");
-  else if (res && !res.ok) showLogin((await res.json().catch(() => ({}))).error || `Server error ${res.status}`);
+  apiKey = (await getSetting("apiKey")) ?? "";
+  if (!apiKey) showKeyDialog();
 })();

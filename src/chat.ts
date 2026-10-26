@@ -1,5 +1,4 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { Env } from "./index";
 import { SYSTEM_PROMPT } from "./system-prompt";
 
 const MODEL = "claude-haiku-5-5";
@@ -22,9 +21,12 @@ type ChatEvent =
   | { type: "done"; stop_reason: string | null }
   | { type: "error"; message: string };
 
-export async function handleChat(request: Request, env: Env): Promise<Response> {
-  if (!env.ANTHROPIC_API_KEY) {
-    return Response.json({ error: "ANTHROPIC_API_KEY secret is not set on the Worker." }, { status: 500 });
+export async function handleChat(request: Request): Promise<Response> {
+  // The key comes from the browser with every request and is only used to make
+  // this one call; nothing is stored server-side.
+  const apiKey = request.headers.get("X-Api-Key");
+  if (!apiKey) {
+    return Response.json({ error: "Add your Claude API key in Settings." }, { status: 401 });
   }
 
   const body = (await request.json()) as { messages?: Anthropic.Beta.BetaMessageParam[] };
@@ -33,7 +35,7 @@ export async function handleChat(request: Request, env: Env): Promise<Response> 
     return Response.json({ error: "messages must be a non-empty array ending with a user turn." }, { status: 400 });
   }
 
-  const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+  const client = new Anthropic({ apiKey });
   const tools = buildTools(request);
 
   const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
@@ -196,7 +198,7 @@ async function forwardStream(
 }
 
 function describeError(err: unknown): string {
-  if (err instanceof Anthropic.AuthenticationError) return "The Anthropic API key was rejected. Check the ANTHROPIC_API_KEY secret.";
+  if (err instanceof Anthropic.AuthenticationError) return "Your Claude API key was rejected. Check it in Settings.";
   if (err instanceof Anthropic.RateLimitError) return "Rate limited by the Claude API. Give it a moment and try again.";
   if (err instanceof Anthropic.BadRequestError) return `The Claude API rejected the request: ${err.message}`;
   if (err instanceof Anthropic.APIError) return `Claude API error ${err.status ?? ""}: ${err.message}`;

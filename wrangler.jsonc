@@ -13,7 +13,6 @@
   // Workers AI: Whisper for speech-to-text, Deepgram Aura for cloud text-to-speech.
   "ai": { "binding": "AI" },
   "observability": { "enabled": true }
-  // Secrets (set with `npx wrangler secret put <NAME>`):
-  //   ANTHROPIC_API_KEY  - your Claude API key
-  //   APP_PASSWORD       - the password the web UI asks for
+  // No secrets: the Claude API key is entered in the web UI, kept in the
+  // browser, and sent along with each chat request.
 }

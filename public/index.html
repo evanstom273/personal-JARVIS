@@ -62,13 +62,16 @@
 
   <div id="drop-overlay">Drop files to attach</div>
 
-  <dialog id="login">
-    <form method="dialog" id="login-form">
-      <h2>JARVIS</h2>
-      <p>Enter the app password (the <code>APP_PASSWORD</code> secret on your Worker).</p>
-      <input type="password" id="login-password" autocomplete="current-password" required />
-      <p id="login-error" class="error"></p>
-      <button class="btn wide" type="submit">Unlock</button>
+  <dialog id="key-dialog">
+    <form id="key-form">
+      <h2>Claude API key</h2>
+      <p>Paste your API key from <a href="https://platform.claude.com/settings/keys" target="_blank" rel="noopener">platform.claude.com</a>. It's saved only in this browser.</p>
+      <input type="password" id="key-input" autocomplete="off" spellcheck="false" placeholder="sk-ant-…" required />
+      <p id="key-error" class="error"></p>
+      <div class="dialog-actions">
+        <button type="button" id="key-cancel" class="btn ghost">Cancel</button>
+        <button class="btn" type="submit">Save</button>
+      </div>
     </form>
   </dialog>
 
@@ -108,8 +111,9 @@
       </fieldset>
 
       <fieldset>
-        <legend>Access</legend>
-        <button type="button" id="logout" class="btn ghost">Forget password on this device</button>
+        <legend>Claude API key</legend>
+        <button type="button" id="change-key" class="btn ghost">Change API key</button>
+        <button type="button" id="forget-key" class="btn ghost">Remove key from this browser</button>
       </fieldset>
 
       <div class="dialog-actions">
