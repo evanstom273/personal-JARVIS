@@ -2,20 +2,23 @@
 // PDFs are in the history). One record per conversation:
 //   { id, title, createdAt, updatedAt, messages: [{ role, content, display? }] }
 // `content` is exactly what goes to the Claude API; `display` is UI-only.
-// A small key/value store alongside holds the API key.
+// A small key/value store alongside holds the API key, and the notes store
+// holds the memory notes: { id (lowercased title), title, content, createdAt, updatedAt }.
 
 const DB_NAME = "jarvis";
 const STORE = "conversations";
 const KV = "kv";
+const NOTES = "notes";
 
 let dbPromise;
 function db() {
   dbPromise ??= new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 2);
+    const req = indexedDB.open(DB_NAME, 3);
     req.onupgradeneeded = () => {
       const names = req.result.objectStoreNames;
       if (!names.contains(STORE)) req.result.createObjectStore(STORE, { keyPath: "id" });
       if (!names.contains(KV)) req.result.createObjectStore(KV);
+      if (!names.contains(NOTES)) req.result.createObjectStore(NOTES, { keyPath: "id" });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -41,3 +44,10 @@ export const deleteConversation = (id) => tx("readwrite", (s) => s.delete(id));
 export const getSetting = (key) => tx("readonly", (s) => s.get(key), KV);
 export const setSetting = (key, value) => tx("readwrite", (s) => s.put(value, key), KV);
 export const deleteSetting = (key) => tx("readwrite", (s) => s.delete(key), KV);
+
+export const getAllNotes = () => tx("readonly", (s) => s.getAll(), NOTES);
+export const putNote = (note) => tx("readwrite", (s) => s.put(note), NOTES);
+export const removeNote = (id) => tx("readwrite", (s) => s.delete(id), NOTES);
+
+// Ask the browser not to evict our data when storage runs low.
+export const requestPersistence = () => navigator.storage?.persist?.().catch(() => false);

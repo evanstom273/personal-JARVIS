@@ -1,9 +1,10 @@
-import { marked } from "./vendor/marked.esm.js";
-import DOMPurify from "./vendor/purify.es.mjs";
+import { renderMarkdown } from "./markdown.js";
 import {
   listConversations, getConversation, saveConversation, deleteConversation,
-  getSetting, setSetting, deleteSetting,
+  getSetting, setSetting, deleteSetting, requestPersistence,
 } from "./db.js";
+import { isNoteTool, runNoteTool } from "./memory.js";
+import { initNotesUI, openNote, hideNotePane } from "./notes-ui.js";
 import { Recorder, Speaker } from "./voice.js";
 
 const $ = (sel) => document.querySelector(sel);
@@ -146,9 +147,17 @@ async function renderSidebar() {
 }
 
 async function openConversation(id) {
-  if (streaming) return;
+  if (streaming) {
+    // Mid-reply, the only chat you can go back to is the one that's replying.
+    if (id === current?.id) {
+      hideNotePane();
+      els.title.textContent = current?.title ?? assistantName();
+    }
+    return;
+  }
   current = id ? await getConversation(id) : null;
   document.body.classList.remove("sidebar-open");
+  hideNotePane();
   renderMessages();
   renderSidebar();
 }
@@ -162,27 +171,21 @@ $("#scrim").onclick = () => document.body.classList.remove("sidebar-open");
 
 // ---------- Rendering ----------
 
-marked.setOptions({ gfm: true, breaks: true });
+// A user turn that only carries tool results (from the note tools) is part
+// of the assistant's reply as far as the UI is concerned.
+const isToolResults = (m) =>
+  m.role === "user" && Array.isArray(m.content) && m.content.length > 0 && m.content.every((b) => b.type === "tool_result");
+const lastRealUserIndex = (messages) => messages.findLastIndex((m) => m.role === "user" && !isToolResults(m));
 
-function renderMarkdown(md) {
-  const html = DOMPurify.sanitize(marked.parse(md));
-  const div = document.createElement("div");
-  div.className = "markdown";
-  div.innerHTML = html;
-  for (const a of div.querySelectorAll("a")) {
-    a.target = "_blank";
-    a.rel = "noopener noreferrer";
-  }
-  return div;
-}
-
-// Consecutive assistant messages (pause_turn continuations) render as one bubble.
+// One bubble per reply, however many API round trips (tool calls,
+// pause_turn continuations) it took.
 function groupMessages(messages) {
   const groups = [];
   for (const m of messages) {
+    const role = isToolResults(m) ? "assistant" : m.role;
     const last = groups[groups.length - 1];
-    if (m.role === "assistant" && last?.role === "assistant") last.items.push(m);
-    else groups.push({ role: m.role, items: [m] });
+    if (role === "assistant" && last?.role === "assistant") last.items.push(m);
+    else groups.push({ role, items: [m] });
   }
   return groups;
 }
@@ -232,8 +235,12 @@ function assistantNode(blocks) {
   const view = createAssistantView();
   const sources = [];
   let md = "";
+  let afterTool = false;
   for (const b of blocks) {
     if (b.type === "text") {
+      // Text before and after a tool call are separate paragraphs.
+      if (afterTool && md) md += "\n\n";
+      afterTool = false;
       md += b.text;
       for (const c of b.citations ?? []) {
         if (!c.url) continue;
@@ -241,14 +248,40 @@ function assistantNode(blocks) {
         if (!n) n = sources.push({ url: c.url, title: c.title || c.url });
         md += ` [${n}](<${c.url}> "${(c.title || "").replace(/["<>]/g, "'")}")`;
       }
-    } else if (b.type === "server_tool_use") {
+    } else if (b.type === "server_tool_use" || b.type === "tool_use") {
       view.addTool(b.name, b.input);
+      afterTool = true;
     }
   }
   view.setText(md, { final: true });
   view.setSources(sources);
   view.finish(md);
   return view.node;
+}
+
+function toolChip(name, input) {
+  const t = input.title;
+  const note = (icon, label) => {
+    const el = chip(`${icon} ${label}`);
+    if (t && name !== "delete_note") {
+      el.classList.add("clickable");
+      el.onclick = () => openNote(name === "rename_note" ? input.new_title ?? t : t);
+    }
+    return el;
+  };
+  switch (name) {
+    case "web_search": return chip(`🔍 ${input.query ?? "Searching the web"}`);
+    case "web_fetch": return chip(`🌐 ${input.url ?? "Reading a page"}`, input.url);
+    case "search_notes": return chip(`🗂️ Notes: ${input.query ?? "searching"}`);
+    case "list_notes": return chip(`🗂️ Listed notes${input.tag ? ` #${input.tag}` : ""}`);
+    case "read_note": return note("📖", t ?? "Reading a note");
+    case "create_note": return note("📝", `Created ${t ?? "a note"}`);
+    case "edit_note":
+    case "append_to_note": return note("✏️", `Updated ${t ?? "a note"}`);
+    case "rename_note": return note("✏️", `Renamed ${t ?? "a note"} → ${input.new_title ?? "…"}`);
+    case "delete_note": return note("🗑️", `Deleted ${t ?? "a note"}`);
+    default: return chip(`⚙️ ${name}`);
+  }
 }
 
 function chip(text, href) {
@@ -288,9 +321,7 @@ function createAssistantView() {
   return {
     node,
     addTool(name, input) {
-      if (name === "web_search") status.append(chip(`🔍 ${input?.query ?? "Searching the web"}`));
-      else if (name === "web_fetch") status.append(chip(`🌐 ${input?.url ?? "Reading a page"}`, input?.url));
-      else status.append(chip(`⚙️ ${name}`));
+      status.append(toolChip(name, input ?? {}));
     },
     setText(md, { final = false } = {}) {
       if (!md && !final) return;
@@ -508,6 +539,7 @@ async function send({ viaVoice = false } = {}) {
   if (text) content.push({ type: "text", text });
 
   if (!current) current = newConversation();
+  await resolveDanglingToolUses(current);
   if (current.messages.length === 0) {
     current.title = (text || pending[0]?.name || "New chat").slice(0, 60);
   }
@@ -525,6 +557,9 @@ async function send({ viaVoice = false } = {}) {
   await streamReply(current, { speakAfter: settings.autoSpeak === "always" || (viaVoice && settings.autoSpeak === "voice") });
 }
 
+// Most tool rounds a single reply may take before we stop it.
+const MAX_TOOL_ROUNDS = 12;
+
 async function streamReply(conv, { speakAfter }) {
   const view = createAssistantView();
   els.messages.append(view.node);
@@ -534,6 +569,7 @@ async function streamReply(conv, { speakAfter }) {
   updateSendState();
 
   let liveText = "";
+  let afterTool = false;
   let renderQueued = false;
   const sources = [];
   let gotMessage = false;
@@ -551,46 +587,72 @@ async function streamReply(conv, { speakAfter }) {
   };
 
   try {
-    const res = await apiFetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: apiMessages(conv), persona: persona() }),
-      signal: streaming.signal,
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(data.error || `Server error ${res.status}`);
-    }
-
-    for await (const event of readEvents(res.body)) {
-      switch (event.type) {
-        case "text":
-          liveText += event.text;
-          queueRender();
-          break;
-        case "tool":
-          view.addTool(event.name, event.input);
-          scrollToBottom();
-          break;
-        case "sources":
-          for (const s of event.results) if (!sources.some((x) => x.url === s.url)) sources.push(s);
-          break;
-        case "tool_error":
-          view.notice(`Tool problem: ${event.code.replace(/_/g, " ")}`);
-          break;
-        case "message":
-          gotMessage = true;
-          conv.messages.push({ role: "assistant", content: event.content });
-          conv.updatedAt = Date.now();
-          await saveConversation(conv);
-          break;
-        case "done":
-          stopReason = event.stop_reason;
-          break;
-        case "error":
-          errorText = event.message;
-          break;
+    // Each round is one request to the Worker. A round that ends in
+    // stop_reason "tool_use" wants note tools run here in the browser; the
+    // results go back as the next request.
+    for (let round = 0; ; round++) {
+      stopReason = null;
+      let lastContent = null;
+      const res = await apiFetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: apiMessages(conv), persona: persona() }),
+        signal: streaming.signal,
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Server error ${res.status}`);
       }
+
+      for await (const event of readEvents(res.body)) {
+        switch (event.type) {
+          case "text":
+            if (afterTool && liveText) liveText += "\n\n";
+            afterTool = false;
+            liveText += event.text;
+            queueRender();
+            break;
+          case "tool":
+            view.addTool(event.name, event.input);
+            afterTool = true;
+            scrollToBottom();
+            break;
+          case "sources":
+            for (const s of event.results) if (!sources.some((x) => x.url === s.url)) sources.push(s);
+            break;
+          case "tool_error":
+            view.notice(`Tool problem: ${event.code.replace(/_/g, " ")}`);
+            break;
+          case "message":
+            gotMessage = true;
+            lastContent = event.content;
+            conv.messages.push({ role: "assistant", content: event.content });
+            conv.updatedAt = Date.now();
+            await saveConversation(conv);
+            break;
+          case "done":
+            stopReason = event.stop_reason;
+            break;
+          case "error":
+            errorText = event.message;
+            break;
+        }
+      }
+
+      const toolUses = (lastContent ?? []).filter((b) => b.type === "tool_use");
+      if (!toolUses.length) break;
+      // Every tool_use needs a matching tool_result before the conversation
+      // can continue, even when we're not going to run it.
+      const skip =
+        stopReason !== "tool_use" ? "Not run: the reply was cut off before this call finished."
+        : round + 1 >= MAX_TOOL_ROUNDS ? "Not run: too many tool calls in one reply."
+        : null;
+      await answerToolCalls(conv, toolUses, skip);
+      if (skip) {
+        if (stopReason === "tool_use") stopReason = "tool_limit";
+        break;
+      }
+      if (streaming.signal.aborted) break;
     }
   } catch (err) {
     if (err.name !== "AbortError") errorText = err.message;
@@ -601,9 +663,9 @@ async function streamReply(conv, { speakAfter }) {
 
   // Swap the live bubble for one rendered from the saved content, which has
   // proper citation markers. Keep it if nothing was saved (error/abort).
+  const replyBlocks = () => conv.messages.slice(lastRealUserIndex(conv.messages) + 1).flatMap((m) => m.content);
   if (gotMessage && current?.id === conv.id) {
-    const lastUser = conv.messages.findLastIndex((m) => m.role === "user");
-    const finalNode = assistantNode(conv.messages.slice(lastUser + 1).flatMap((m) => m.content));
+    const finalNode = assistantNode(replyBlocks());
     view.node.replaceWith(finalNode);
     addNotices(finalNode, stopReason, errorText);
   } else {
@@ -615,15 +677,35 @@ async function streamReply(conv, { speakAfter }) {
   renderSidebar();
 
   if (speakAfter && gotMessage && stopReason !== "refusal") {
-    const lastUser = conv.messages.findLastIndex((m) => m.role === "user");
-    const replyText = conv.messages
-      .slice(lastUser + 1)
-      .flatMap((m) => m.content)
-      .filter((b) => b.type === "text")
-      .map((b) => b.text)
-      .join("");
-    speakText(replyText);
+    speakText(replyBlocks().filter((b) => b.type === "text").map((b) => b.text).join("\n\n"));
   }
+}
+
+// Runs the note tools Claude asked for and records the results as the next
+// user turn. With `skip` set, records that reason as an error instead.
+async function answerToolCalls(conv, toolUses, skip = null) {
+  const results = [];
+  for (const t of toolUses) {
+    const { content, is_error } = skip
+      ? { content: skip, is_error: true }
+      : isNoteTool(t.name)
+        ? await runNoteTool(t.name, t.input)
+        : { content: `Unknown tool "${t.name}".`, is_error: true };
+    results.push({ type: "tool_result", tool_use_id: t.id, content, is_error });
+  }
+  conv.messages.push({ role: "user", content: results });
+  conv.updatedAt = Date.now();
+  await saveConversation(conv);
+}
+
+// If a reply was interrupted (tab closed, network died) after Claude asked
+// for a tool but before the result was saved, close it off so the next
+// message isn't rejected.
+async function resolveDanglingToolUses(conv) {
+  const last = conv.messages[conv.messages.length - 1];
+  if (last?.role !== "assistant" || !Array.isArray(last.content)) return;
+  const toolUses = last.content.filter((b) => b.type === "tool_use");
+  if (toolUses.length) await answerToolCalls(conv, toolUses, "Not run: the reply was interrupted.");
 }
 
 function addNotices(node, stopReason, errorText) {
@@ -637,6 +719,7 @@ function addNotices(node, stopReason, errorText) {
   if (stopReason === "refusal") add("Claude declined to continue with this one.");
   if (stopReason === "max_tokens") add("Reply hit the length limit and was cut off.");
   if (stopReason === "pause_turn") add("Paused after a lot of tool use. Send “carry on” to continue.");
+  if (stopReason === "tool_limit") add("Stopped after a lot of note lookups in one go. Send “carry on” to continue.");
   if (errorText) add(errorText, true);
 }
 
@@ -802,7 +885,10 @@ $("#forget-key").onclick = async () => {
 
 // ---------- Boot ----------
 
+initNotesUI({ showChat: () => openConversation(current?.id ?? null) });
+
 (async () => {
+  requestPersistence();
   applyName();
   renderMessages();
   renderSidebar();

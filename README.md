@@ -8,6 +8,7 @@ A personal AI assistant built on **Claude Haiku 5.5**, running as a website on *
 - **Speech-to-text:** tap the mic. By default it uses Whisper on Workers AI, which works in any browser (and in an Android WebView later). The browser's own engine is an option in Settings.
 - **Text-to-speech:** a "Read aloud" button on every reply, plus auto-read (by default, only when you used the mic). Uses either the browser voice or Deepgram Aura on Workers AI.
 - Conversations are saved in the browser (IndexedDB) and listed in the sidebar
+- **Memory (Notes):** an Obsidian-style vault of Markdown notes with `[[links]]`, backlinks and `#tags`. Ask it to remember something and it writes or updates notes. Mention something and it searches the notes and reads only what's relevant, rather than loading the whole vault into every chat. Browse and edit notes in the Notes tab, upload `.md` files, and export everything as a `.zip` that opens as an Obsidian vault.
 - Your Claude API key is entered on the website and stored only in your browser (IndexedDB). The Worker uses it for that one request and never stores it, so someone who finds the URL has no key to spend.
 
 ## Layout
@@ -15,12 +16,16 @@ A personal AI assistant built on **Claude Haiku 5.5**, running as a website on *
 ```
 src/index.ts          Worker entry: routing
 src/chat.ts           /api/chat: streams Claude's reply as server-sent events
+src/memory-tools.ts   The note tools Claude can call (they run in the browser)
 src/system-prompt.ts  JARVIS's standing instructions (edit freely)
 src/voice.ts          /api/transcribe (Whisper) and /api/speak (Aura)
 public/               The web app (plain HTML/CSS/JS, no build step)
-  app.js              UI, attachments, streaming, settings
+  app.js              UI, attachments, streaming, tool loop, settings
+  memory.js           Notes: storage, links/backlinks, search, tool implementations, zip export
+  notes-ui.js         Notes tab, note reader and editor
+  markdown.js         Markdown rendering, including [[wikilinks]]
   voice.js            Recording, transcription and speech playback
-  db.js               IndexedDB storage (conversations + API key)
+  db.js               IndexedDB storage (conversations, notes, API key)
   vendor/             marked + DOMPurify (Markdown rendering)
 wrangler.jsonc        Cloudflare config
 ```
@@ -65,6 +70,7 @@ Workers AI (Whisper and Aura) has a free daily allowance on Cloudflare that casu
 ## Notes and limitations
 
 - **Word/Excel files** aren't read directly. Export them to PDF or CSV first.
-- **Chat history lives in the browser** you're using, so it doesn't sync between devices yet.
+- **Chats and notes live in the browser** you're using, so they don't sync between devices yet. Use Notes → Export now and then as a backup: clearing site data wipes them.
+- **Note search is keyword-based**, not semantic. Claude usually tries a few phrasings, but a note about "Mum" won't surface for "mother" unless one of those words is in it.
 - **No login.** Chat needs your API key, but the voice endpoints (`/api/transcribe`, `/api/speak`) are open, so anyone who found the URL could use your Workers AI free allowance. For proper lock-down, put the Worker behind Cloudflare Access (Zero Trust, free for personal use).
 - **Android APK:** later. The front end is a plain static site, so it can be wrapped (e.g. with Capacitor). Whisper STT and Aura TTS already avoid the WebView's missing speech APIs.
