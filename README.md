@@ -53,7 +53,7 @@ Wrangler prints the URL (`https://personal-jarvis.<your-subdomain>.workers.dev`)
 ## Tweaking
 
 - **Model, effort, tool limits:** constants at the top of `src/chat.ts`. `EFFORT` is `"medium"` (Haiku's default). `"low"` is quicker and cheaper; `"high"` thinks harder.
-- **Personality / instructions:** `src/system-prompt.ts`. Changing it doesn't break existing conversations.
+- **Personality:** in the app, Settings → Personality sets the assistant's name, what it calls you, and free-form instructions on tone and style. These are stored in your browser and apply from the next message, in every chat. The fixed part of the instructions lives in `src/system-prompt.ts`. Changing either doesn't break existing conversations.
 - **Web search** uses the basic tool versions (`web_search_20250305`, `web_fetch_20250910`), capped at 5 searches and 5 fetches per message. Searches cost $10 per 1,000 on top of tokens.
 
 ## Costs, roughly

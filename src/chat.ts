@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { SYSTEM_PROMPT } from "./system-prompt";
+import { buildSystemPrompt, type Persona } from "./system-prompt";
 
 const MODEL = "claude-haiku-5-5";
 const MAX_TOKENS = 64000;
@@ -29,13 +29,14 @@ export async function handleChat(request: Request): Promise<Response> {
     return Response.json({ error: "Add your Claude API key in Settings." }, { status: 401 });
   }
 
-  const body = (await request.json()) as { messages?: Anthropic.Beta.BetaMessageParam[] };
+  const body = (await request.json()) as { messages?: Anthropic.Beta.BetaMessageParam[]; persona?: Persona };
   const messages = body.messages;
   if (!Array.isArray(messages) || messages.length === 0 || messages[messages.length - 1].role !== "user") {
     return Response.json({ error: "messages must be a non-empty array ending with a user turn." }, { status: 400 });
   }
 
   const client = new Anthropic({ apiKey });
+  const system = buildSystemPrompt(body.persona);
   const tools = buildTools(request);
 
   const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
@@ -59,7 +60,7 @@ export async function handleChat(request: Request): Promise<Response> {
           model: MODEL,
           max_tokens: MAX_TOKENS,
           betas: BETAS,
-          system: SYSTEM_PROMPT,
+          system,
           // Thinking blocks are tied to the exact conversation prefix. If the
           // system prompt or tools change between deploys, drop stale blocks
           // instead of failing the whole request.

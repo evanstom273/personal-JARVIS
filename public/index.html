@@ -80,6 +80,20 @@
       <h2>Settings</h2>
 
       <fieldset>
+        <legend>Personality</legend>
+        <label>Assistant's name
+          <input type="text" name="assistantName" placeholder="JARVIS" maxlength="200" autocomplete="off" />
+        </label>
+        <label>What it should call you
+          <input type="text" name="userName" placeholder="Your name or nickname" maxlength="200" autocomplete="off" />
+        </label>
+        <label>How it should respond
+          <textarea name="customInstructions" rows="6" placeholder="Tone, personality, things to do or avoid, anything it should know about you…"></textarea>
+        </label>
+        <p class="hint">Applies from your next message, in every chat.</p>
+      </fieldset>
+
+      <fieldset>
         <legend>Voice input</legend>
         <label>Speech-to-text
           <select name="sttEngine">
