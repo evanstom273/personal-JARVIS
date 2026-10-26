@@ -8,19 +8,19 @@ A personal AI assistant built on **Claude Haiku 5.5**, running as a website on *
 - **Speech-to-text:** tap the mic. By default it uses Whisper on Workers AI, which works in any browser (and in an Android WebView later). The browser's own engine is an option in Settings.
 - **Text-to-speech:** a "Read aloud" button on every reply, plus auto-read (by default, only when you used the mic). Uses either the browser voice or Deepgram Aura on Workers AI.
 - Conversations are saved in the browser (IndexedDB) and listed in the sidebar
-- Locked with a password so nobody else can run up your API bill
+- Your Claude API key is entered on the website and stored only in your browser (IndexedDB). The Worker uses it for that one request and never stores it, so someone who finds the URL has no key to spend.
 
 ## Layout
 
 ```
-src/index.ts          Worker entry: routing + password check
+src/index.ts          Worker entry: routing
 src/chat.ts           /api/chat: streams Claude's reply as server-sent events
 src/system-prompt.ts  JARVIS's standing instructions (edit freely)
 src/voice.ts          /api/transcribe (Whisper) and /api/speak (Aura)
 public/               The web app (plain HTML/CSS/JS, no build step)
   app.js              UI, attachments, streaming, settings
   voice.js            Recording, transcription and speech playback
-  db.js               IndexedDB conversation storage
+  db.js               IndexedDB storage (conversations + API key)
   vendor/             marked + DOMPurify (Markdown rendering)
 wrangler.jsonc        Cloudflare config
 ```
@@ -37,8 +37,7 @@ npx wrangler login
 ### Run locally
 
 ```bash
-cp .dev.vars.example .dev.vars   # then fill in your API key and a password
-npm run dev                      # http://localhost:8787
+npm run dev    # http://localhost:8787
 ```
 
 Workers AI (the voice features) always runs on Cloudflare's servers, even in local dev, so `wrangler login` has to be done first.
@@ -46,12 +45,10 @@ Workers AI (the voice features) always runs on Cloudflare's servers, even in loc
 ### Deploy
 
 ```bash
-npx wrangler secret put ANTHROPIC_API_KEY
-npx wrangler secret put APP_PASSWORD
 npm run deploy
 ```
 
-Wrangler prints the URL (`https://personal-jarvis.<your-subdomain>.workers.dev`). Open it and enter the password.
+Wrangler prints the URL (`https://personal-jarvis.<your-subdomain>.workers.dev`). Open it and paste your API key when asked. You can change or remove it later in Settings.
 
 ## Tweaking
 
@@ -69,5 +66,5 @@ Workers AI (Whisper and Aura) has a free daily allowance on Cloudflare that casu
 
 - **Word/Excel files** aren't read directly. Export them to PDF or CSV first.
 - **Chat history lives in the browser** you're using, so it doesn't sync between devices yet.
-- **The password** is a simple shared secret stored in the browser. For stronger protection, put the Worker behind Cloudflare Access (Zero Trust, free for personal use).
+- **No login.** Chat needs your API key, but the voice endpoints (`/api/transcribe`, `/api/speak`) are open, so anyone who found the URL could use your Workers AI free allowance. For proper lock-down, put the Worker behind Cloudflare Access (Zero Trust, free for personal use).
 - **Android APK:** later. The front end is a plain static site, so it can be wrapped (e.g. with Capacitor). Whisper STT and Aura TTS already avoid the WebView's missing speech APIs.
